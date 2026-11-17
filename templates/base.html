@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Job Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container navbar-inner">
+            <a class="logotext" href="{{ url_for('dashboard') }}">Job Tracker</a>
+            <div class="navbar-links">
+                <a class="navbar-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="navbar-link" href="#">Companies</a>
+                <a class="navbar-link" href="#">Jobs</a>
+                <a class="navbar-link" href="#">Applications</a>
+                <a class="navbar-link" href="#">Contacts</a>
+                <a class="navbar-link" href="#">Job Match</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">COP4751 · Job Tracker</footer>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="stats-grid">
+    {% for label, value in totals.items() %}
+    <div class="card stat-card">
+        <p class="stat-label">{{ label }}</p>
+        <p class="stat-value">{{ value }}</p>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="two-col">
+    <div class="card">
+        <div class="card-header">Applications by Status</div>
+        <ul class="list">
+            {% for row in status_counts %}
+            <li class="list-item">
+                <span class="badge badge-{{ row.status|lower }}">{{ row.status }}</span>
+                <strong>{{ row.total }}</strong>
+            </li>
+            {% else %}
+            <li class="list-item text-muted">No applications yet</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Recent Applications</div>
+        <table class="table">
+            <thead>
+                <tr><th>Job</th><th>Company</th><th>Date</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {% for app in recent %}
+                <tr>
+                    <td>{{ app.job_title }}</td>
+                    <td>{{ app.company_name }}</td>
+                    <td>{{ app.application_date }}</td>
+                    <td><span class="badge badge-{{ app.status|lower }}">{{ app.status }}</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted">No applications yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

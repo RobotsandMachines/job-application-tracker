@@ -12,7 +12,7 @@
             <a class="logotext" href="{{ url_for('dashboard') }}">Job Tracker</a>
             <div class="navbar-links">
                 <a class="navbar-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a class="navbar-link" href="#">Companies</a>
+                <a class="navbar-link {% if request.endpoint in ('companies', 'company_detail', 'add_company', 'edit_company') %}active{% endif %}" href="{{ url_for('companies') }}">Companies</a>
                 <a class="navbar-link" href="#">Jobs</a>
                 <a class="navbar-link" href="#">Applications</a>
                 <a class="navbar-link" href="#">Contacts</a>

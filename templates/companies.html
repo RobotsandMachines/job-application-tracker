@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Companies{% endblock %}
+{% block content %}
+
+{% if detail %}
+
+{# VIEWER FOR DETAILS #}
+
+<div class="page-header">
+    <h1>{{ detail.company_name }}</h1>
+    <div class="actions">
+        <a class="btn btn-primary" href="{{ url_for('edit_company', company_id=detail.company_id) }}">Edit</a>
+        <a class="btn btn-secondary" href="{{ url_for('companies') }}">Back</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body detail-grid">
+        <div><span class="detail-label">Industry</span>{{ detail.industry or '—' }}</div>
+        <div><span class="detail-label">Location</span>{{ [detail.city, detail.state]|select|join(', ') or '—' }}</div>
+        <div><span class="detail-label">Website</span>
+            {% if detail.website %}<a href="{{ detail.website }}" target="_blank">{{ detail.website }}</a>{% else %}—{% endif %}
+        </div>
+        <div class="full"><span class="detail-label">Notes</span>{{ detail.notes or '—' }}</div>
+    </div>
+</div>
+
+<div class="two-col">
+    <div class="card">
+        <div class="card-header">Jobs ({{ jobs|length }})</div>
+        <ul class="list">
+            {% for job in jobs %}
+            <li class="list-item">{{ job.job_title }} <span class="text-muted">{{ job.job_type or '' }}</span></li>
+            {% else %}
+            <li class="list-item text-muted">No jobs for this company</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="card">
+        <div class="card-header">Contacts ({{ contacts|length }})</div>
+        <ul class="list">
+            {% for contact in contacts %}
+            <li class="list-item">{{ contact.contact_name }} <span class="text-muted">{{ contact.title or '' }}</span></li>
+            {% else %}
+            <li class="list-item text-muted">No contacts for this company</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+{% else %}
+
+{# LIST AND FORM #}
+
+<h1>Companies</h1>
+
+<div class="card">
+    <div class="card-header">{{ 'Edit Company' if edit_id else 'Add Company' }}</div>
+    <div class="card-body">
+        <form method="post"
+              action="{{ url_for('edit_company', company_id=edit_id) if edit_id else url_for('add_company') }}">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="company_name">Company Name *</label>
+                    <input class="form-control" id="company_name" name="company_name"
+                           maxlength="100" required value="{{ form.company_name or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="industry">Industry</label>
+                    <input class="form-control" id="industry" name="industry"
+                           maxlength="50" value="{{ form.industry or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="website">Website</label>
+                    <input class="form-control" id="website" name="website" type="url"
+                           maxlength="200" placeholder="https://" value="{{ form.website or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="city">City</label>
+                    <input class="form-control" id="city" name="city"
+                           maxlength="50" value="{{ form.city or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="state">State</label>
+                    <input class="form-control" id="state" name="state"
+                           maxlength="50" value="{{ form.state or '' }}">
+                </div>
+                <div class="form-group full">
+                    <label class="form-label" for="notes">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3">{{ form.notes or '' }}</textarea>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">{{ 'Save Changes' if edit_id else 'Add Company' }}</button>
+                {% if edit_id %}
+                <a class="btn btn-secondary" href="{{ url_for('companies') }}">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">All Companies ({{ companies|length }})</div>
+    <table class="table">
+        <thead>
+            <tr><th>Name</th><th>Industry</th><th>Location</th><th>Website</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            {% for c in companies %}
+            <tr>
+                <td><a href="{{ url_for('company_detail', company_id=c.company_id) }}">{{ c.company_name }}</a></td>
+                <td>{{ c.industry or '—' }}</td>
+                <td>{{ [c.city, c.state]|select|join(', ') or '—' }}</td>
+                <td>{% if c.website %}<a href="{{ c.website }}" target="_blank">Visit</a>{% else %}—{% endif %}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('edit_company', company_id=c.company_id) }}">Edit</a>
+                        <form method="post" action="{{ url_for('delete_company', company_id=c.company_id) }}"
+                              onsubmit="return confirm('Delete this company? Its jobs, applications and contacts will also be deleted.');">
+                            <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-muted">No companies yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}

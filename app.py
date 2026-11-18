@@ -14,11 +14,13 @@ app.secret_key = os.getenv("SECRET_KEY")
 
 # DASHBOARD SECTION
 
+# Redirect home page to dashboard
 @app.route("/")
 def index():
     return redirect(url_for("dashboard"))
 
 
+# Show dashboard stats and recent applications
 @app.route("/dashboard")
 def dashboard():
     conn = get_connection()
@@ -55,13 +57,13 @@ def dashboard():
         conn.close()
 
 # HELPER FUNCTIONS
+# Clean form input
 def clean(value):
-    """Strip spaces; turn empty strings into None (NULL in MySQL)."""
     value = (value or "").strip()
     return value or None
 
+# Get all rows from a query
 def query_all(sql, params=()):
-    """Run a SELECT and return all rows as dictionaries."""
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -72,14 +74,14 @@ def query_all(sql, params=()):
         conn.close()
 
 
+# Get one row from a query
 def query_one(sql, params=()):
-    """Run a SELECT and return the first row, or None."""
     rows = query_all(sql, params)
     return rows[0] if rows else None
 
 
+# Run insert, update or delete queries
 def run_write(sql, params=()):
-    """Run INSERT/UPDATE/DELETE. Returns rows affected, or None if it failed."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -94,13 +96,14 @@ def run_write(sql, params=()):
         conn.close()
 
 
+# Show validation errors
 def flash_errors(errors):
     for error in errors:
         flash(error, "danger")
 
 
+# Convert JSON column to Python data
 def parse_json(value, default):
-    """MySQL JSON columns come back as text; turn them into Python objects."""
     if value is None:
         return default
     if isinstance(value, (bytes, bytearray)):
@@ -113,6 +116,7 @@ def parse_json(value, default):
     return value
 
 
+# Check if a date is valid
 def valid_date(value):
     try:
         datetime.strptime(value, "%Y-%m-%d")
@@ -121,6 +125,7 @@ def valid_date(value):
         return False
 
 
+# Format numbers as money
 @app.template_filter("money")
 def money(value):
     return f"${value:,}" if value is not None else "—"
@@ -130,6 +135,7 @@ def money(value):
 COMPANY_FIELDS = ["company_name", "industry", "website", "city", "state", "notes"]
 
 
+# Read and validate company form
 def get_company_form():
     data = {field: clean(request.form.get(field)) for field in COMPANY_FIELDS}
     errors = []
@@ -149,17 +155,20 @@ def get_company_form():
     return data, errors
 
 
+# Render companies page
 def render_companies_page(form=None, edit_id=None):
     companies = query_all("SELECT * FROM companies ORDER BY company_name")
     return render_template("companies.html", companies=companies,
                            form=form or {}, edit_id=edit_id, detail=None)
 
 
+# Show companies list
 @app.route("/companies")
 def companies():
     return render_companies_page()
 
 
+# Show company details
 @app.route("/companies/<int:company_id>")
 def company_detail(company_id):
     company = query_one("SELECT * FROM companies WHERE company_id = %s", (company_id,))
@@ -175,6 +184,7 @@ def company_detail(company_id):
     return render_template("companies.html", detail=company, jobs=jobs, contacts=contacts)
 
 
+# Add a company
 @app.route("/companies/add", methods=["POST"])
 def add_company():
     data, errors = get_company_form()
@@ -191,6 +201,7 @@ def add_company():
     return redirect(url_for("companies"))
 
 
+# Edit a company
 @app.route("/companies/<int:company_id>/edit", methods=["GET", "POST"])
 def edit_company(company_id):
     if request.method == "POST":
@@ -216,6 +227,7 @@ def edit_company(company_id):
     return render_companies_page(form=company, edit_id=company_id)
 
 
+# Delete a company
 @app.route("/companies/<int:company_id>/delete", methods=["POST"])
 def delete_company(company_id):
     result = run_write("DELETE FROM companies WHERE company_id = %s", (company_id,))
@@ -230,6 +242,7 @@ def delete_company(company_id):
 JOB_TYPES = ["Full-time", "Part-time", "Contract", "Internship"]
 
 
+# Read and validate job form
 def get_job_form():
     data = {field: clean(request.form.get(field)) for field in
             ["company_id", "job_title", "job_type", "salary_min",
@@ -275,8 +288,8 @@ def get_job_form():
     return data, skills, errors
 
 
+# Prepare job values for the database
 def job_values(data, skills):
-    """Convert form strings into the types MySQL expects, in column order."""
     return [
         int(data["company_id"]),
         data["job_title"],
@@ -289,6 +302,7 @@ def job_values(data, skills):
     ]
 
 
+# Render jobs page
 def render_jobs_page(form=None, edit_id=None):
     jobs = query_all("""
         SELECT j.*, c.company_name
@@ -304,11 +318,13 @@ def render_jobs_page(form=None, edit_id=None):
                            edit_id=edit_id, detail=None)
 
 
+# Show jobs list
 @app.route("/jobs")
 def jobs():
     return render_jobs_page()
 
 
+# Show job details
 @app.route("/jobs/<int:job_id>")
 def job_detail(job_id):
     job = query_one("""
@@ -329,6 +345,7 @@ def job_detail(job_id):
     return render_template("jobs.html", detail=job, applications=applications)
 
 
+# Add a job
 @app.route("/jobs/add", methods=["POST"])
 def add_job():
     data, skills, errors = get_job_form()
@@ -346,6 +363,7 @@ def add_job():
     return redirect(url_for("jobs"))
 
 
+# Edit a job
 @app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
 def edit_job(job_id):
     if request.method == "POST":
@@ -372,6 +390,7 @@ def edit_job(job_id):
     return render_jobs_page(form=job, edit_id=job_id)
 
 
+# Delete a job
 @app.route("/jobs/<int:job_id>/delete", methods=["POST"])
 def delete_job(job_id):
     result = run_write("DELETE FROM jobs WHERE job_id = %s", (job_id,))
@@ -386,6 +405,7 @@ def delete_job(job_id):
 APP_STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"]
 
 
+# Read and validate application form
 def get_application_form():
     data = {field: clean(request.form.get(field)) for field in
             ["job_id", "application_date", "status", "resume_version",
@@ -423,6 +443,7 @@ def get_application_form():
     return data, interview, errors
 
 
+# Prepare application values for the database
 def application_values(data, interview):
     return [
         int(data["job_id"]),
@@ -434,6 +455,7 @@ def application_values(data, interview):
     ]
 
 
+# Render applications page
 def render_applications_page(form=None, edit_id=None):
     applications = query_all("""
         SELECT a.*, j.job_title, c.company_name
@@ -454,11 +476,13 @@ def render_applications_page(form=None, edit_id=None):
                            statuses=APP_STATUSES, form=form, edit_id=edit_id, detail=None)
 
 
+# Show applications list
 @app.route("/applications")
 def applications():
     return render_applications_page()
 
 
+# Show application details
 @app.route("/applications/<int:application_id>")
 def application_detail(application_id):
     application = query_one("""
@@ -475,6 +499,7 @@ def application_detail(application_id):
     return render_template("applications.html", detail=application)
 
 
+# Add an application
 @app.route("/applications/add", methods=["POST"])
 def add_application():
     data, interview, errors = get_application_form()
@@ -492,6 +517,7 @@ def add_application():
     return redirect(url_for("applications"))
 
 
+# Edit an application
 @app.route("/applications/<int:application_id>/edit", methods=["GET", "POST"])
 def edit_application(application_id):
     if request.method == "POST":
@@ -522,6 +548,7 @@ def edit_application(application_id):
     return render_applications_page(form=application, edit_id=application_id)
 
 
+# Delete an application
 @app.route("/applications/<int:application_id>/delete", methods=["POST"])
 def delete_application(application_id):
     result = run_write("DELETE FROM applications WHERE application_id = %s", (application_id,))
@@ -539,6 +566,7 @@ EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
 PHONE_PATTERN = r"[0-9\s\-\(\)\+\.]{7,20}"
 
 
+# Read and validate contact form
 def get_contact_form():
     data = {field: clean(request.form.get(field)) for field in CONTACT_FIELDS}
     errors = []
@@ -570,12 +598,14 @@ def get_contact_form():
     return data, errors
 
 
+# Prepare contact values for the database
 def contact_values(data):
     values = [data[f] for f in CONTACT_FIELDS]
     values[0] = int(values[0])
     return values
 
 
+# Render contacts page
 def render_contacts_page(form=None, edit_id=None):
     contacts = query_all("""
         SELECT ct.*, c.company_name
@@ -588,11 +618,13 @@ def render_contacts_page(form=None, edit_id=None):
                            form=form or {}, edit_id=edit_id, detail=None)
 
 
+# Show contacts list
 @app.route("/contacts")
 def contacts():
     return render_contacts_page()
 
 
+# Show contact details
 @app.route("/contacts/<int:contact_id>")
 def contact_detail(contact_id):
     contact = query_one("""
@@ -607,6 +639,7 @@ def contact_detail(contact_id):
     return render_template("contacts.html", detail=contact)
 
 
+# Add a contact
 @app.route("/contacts/add", methods=["POST"])
 def add_contact():
     data, errors = get_contact_form()
@@ -624,6 +657,7 @@ def add_contact():
     return redirect(url_for("contacts"))
 
 
+# Edit a contact
 @app.route("/contacts/<int:contact_id>/edit", methods=["GET", "POST"])
 def edit_contact(contact_id):
     if request.method == "POST":
@@ -649,6 +683,7 @@ def edit_contact(contact_id):
     return render_contacts_page(form=contact, edit_id=contact_id)
 
 
+# Delete a contact
 @app.route("/contacts/<int:contact_id>/delete", methods=["POST"])
 def delete_contact(contact_id):
     result = run_write("DELETE FROM contacts WHERE contact_id = %s", (contact_id,))
@@ -660,6 +695,7 @@ def delete_contact(contact_id):
 
 # JOB MATCH
 
+# Rank jobs by skill match
 @app.route("/job-match")
 def job_match():
     raw = request.args.get("skills", "")

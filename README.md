@@ -66,3 +66,8 @@ job-application-tracker/
 ![Applications](images/aplications.png)
 ![Contacts](images/contacts.png)
 ![Job Match](images/jobMatch.png)
+
+## Demo Video
+
+[![Watch the demo](https://img.youtube.com/vi/5xhq_pqPIXU/0.jpg)](https://www.youtube.com/watch?v=5xhq_pqPIXU)
+

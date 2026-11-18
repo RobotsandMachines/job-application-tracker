@@ -150,14 +150,7 @@ def get_company_form():
 
 
 def render_companies_page(form=None, edit_id=None):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM companies ORDER BY company_name")
-        companies = cursor.fetchall()
-    finally:
-        cursor.close()
-        conn.close()
+    companies = query_all("SELECT * FROM companies ORDER BY company_name")
     return render_template("companies.html", companies=companies,
                            form=form or {}, edit_id=edit_id, detail=None)
 
@@ -169,25 +162,16 @@ def companies():
 
 @app.route("/companies/<int:company_id>")
 def company_detail(company_id):
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM companies WHERE company_id = %s", (company_id,))
-        company = cursor.fetchone()
-        if company is None:
-            flash("Company not found.", "warning")
-            return redirect(url_for("companies"))
-
-        cursor.execute("SELECT job_id, job_title, job_type FROM jobs WHERE company_id = %s",
-                       (company_id,))
-        jobs = cursor.fetchall()
-
-        cursor.execute("SELECT contact_id, contact_name, title, email FROM contacts WHERE company_id = %s",
-                       (company_id,))
-        contacts = cursor.fetchall()
-    finally:
-        cursor.close()
-        conn.close()
+    company = query_one("SELECT * FROM companies WHERE company_id = %s", (company_id,))
+    if company is None:
+        flash("Company not found.", "warning")
+        return redirect(url_for("companies"))
+    jobs = query_all("SELECT job_id, job_title, job_type FROM jobs WHERE company_id = %s",
+                     (company_id,))
+    contacts = query_all("""
+        SELECT contact_id, contact_name, title, email
+        FROM contacts WHERE company_id = %s
+    """, (company_id,))
     return render_template("companies.html", detail=company, jobs=jobs, contacts=contacts)
 
 
@@ -195,24 +179,15 @@ def company_detail(company_id):
 def add_company():
     data, errors = get_company_form()
     if errors:
-        for error in errors:
-            flash(error, "danger")
+        flash_errors(errors)
         return render_companies_page(form=data)
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO companies (company_name, industry, website, city, state, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, [data[f] for f in COMPANY_FIELDS])
-        conn.commit()
+    result = run_write("""
+        INSERT INTO companies (company_name, industry, website, city, state, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, [data[f] for f in COMPANY_FIELDS])
+    if result is not None:
         flash(f"Company '{data['company_name']}' added.", "success")
-    except mysql.connector.Error as err:
-        flash(f"Database error: {err.msg}", "danger")
-    finally:
-        cursor.close()
-        conn.close()
     return redirect(url_for("companies"))
 
 
@@ -221,38 +196,20 @@ def edit_company(company_id):
     if request.method == "POST":
         data, errors = get_company_form()
         if errors:
-            for error in errors:
-                flash(error, "danger")
+            flash_errors(errors)
             return render_companies_page(form=data, edit_id=company_id)
 
-        conn = get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                UPDATE companies
-                SET company_name = %s, industry = %s, website = %s,
-                    city = %s, state = %s, notes = %s
-                WHERE company_id = %s
-            """, [data[f] for f in COMPANY_FIELDS] + [company_id])
-            conn.commit()
+        result = run_write("""
+            UPDATE companies
+            SET company_name = %s, industry = %s, website = %s,
+                city = %s, state = %s, notes = %s
+            WHERE company_id = %s
+        """, [data[f] for f in COMPANY_FIELDS] + [company_id])
+        if result is not None:
             flash(f"Company '{data['company_name']}' updated.", "success")
-        except mysql.connector.Error as err:
-            flash(f"Database error: {err.msg}", "danger")
-        finally:
-            cursor.close()
-            conn.close()
         return redirect(url_for("companies"))
 
-    # GET: load the company into the form
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT * FROM companies WHERE company_id = %s", (company_id,))
-        company = cursor.fetchone()
-    finally:
-        cursor.close()
-        conn.close()
-
+    company = query_one("SELECT * FROM companies WHERE company_id = %s", (company_id,))
     if company is None:
         flash("Company not found.", "warning")
         return redirect(url_for("companies"))
@@ -261,20 +218,11 @@ def edit_company(company_id):
 
 @app.route("/companies/<int:company_id>/delete", methods=["POST"])
 def delete_company(company_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM companies WHERE company_id = %s", (company_id,))
-        conn.commit()
-        if cursor.rowcount:
-            flash("Company deleted.", "success")
-        else:
-            flash("Company not found.", "warning")
-    except mysql.connector.Error as err:
-        flash(f"Database error: {err.msg}", "danger")
-    finally:
-        cursor.close()
-        conn.close()
+    result = run_write("DELETE FROM companies WHERE company_id = %s", (company_id,))
+    if result:
+        flash("Company deleted.", "success")
+    elif result == 0:
+        flash("Company not found.", "warning")
     return redirect(url_for("companies"))
 
 # JOBS SECTION

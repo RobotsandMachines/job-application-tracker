@@ -145,7 +145,7 @@ a:hover {
     background-color: var(--color-surface);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    overflow: hidden;
+    overflow: auto;
     margin-bottom: 1.5rem;
 }
 

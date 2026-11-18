@@ -1,21 +1,68 @@
-# Job Application Tracker 
+# Job Tracker
 
-A web application to help track job applications during the job search process. 
+A web application for tracking job applications, built for COP4751.
+I built it using MySQL, Python (Flask), and HTML/CSS.
 
-## Features (Coming Soon) 
+## Features
+**Dashboard** : displays the totals for companies, jobs, applications and contacts, applications by status, and recent applications, all visible in one spot
+**Companies, Jobs, Applications, Contacts** : full CRUD (create, list, detail view, edit, delete with confirmation) including server side validation
+**Job Match** : here you can enter your skills and jobs will be matched percentually to them, displaying also matched and missing skills
 
-- Track companies and job listings 
+## Tech Stack
+Database: MySQL 8
+Backend: Python 3 with Flask
+Frontend: HTML, Jinja templates and custom CSS (didnt use a framework)
 
-- Record application submissions 
+## Setup Instructions
 
-- Manage interview schedules 
+**First: Clone the repository**
+   git clone https://github.com/RobotsandMachines/job-application-tracker
+   cd job-application-tracker
 
-- Store contact information 
+**Second: Create the database**
+   Open and run `schema.sql` in MySQL Workbench.
 
-## Technologies 
+**Third: Create a virtual environment and install dependencies**
+   python -m venv venv
+   .\venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
 
-- MySQL Database 
+**Fourth: Create a `.env` file in the project folder**
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASSWORD=(your_mysql_password)
+   DB_NAME=job_tracker_project
+   SECRET_KEY=any_random_string
 
-- Python with Flask 
+**Fifth: Run the app**
+   Type in your Command Line:
+   python app.py
+   Open http://127.0.0.1:5000
 
-- HTML/CSS for the web interface 
+## Project Structure
+job-application-tracker/
+├── app.py              # Flask routes, validation and helpers
+├── database.py         # Database connection
+├── schema.sql          # Database creation script + sample data
+├── templates/          # HTML templates (base + one per page)
+├── static/style.css    # Custom styles
+├── requirements.txt    # Python dependencies
+├── AI_USAGE.md         # GenAI usage documentation
+└── README.md
+
+
+## Database Schema
+**companies**: company info
+**jobs**: the job postings
+**applications**: the applications to said jobs
+**contacts**: people at the companies
+
+
+## Screenshots
+
+![Dashboard](images/dashboard.png)
+![Companies](images/companies.png)
+![Jobs](images/jobs.png)
+![Applications](images/aplications.png)
+![Contacts](images/contacts.png)
+![Job Match](images/jobMatch.png)

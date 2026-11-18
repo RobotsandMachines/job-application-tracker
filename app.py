@@ -1,4 +1,7 @@
 import os
+import json
+import re
+from datetime import datetime
 import mysql.connector
 from flask import Flask, render_template, redirect, url_for, request, flash
 from dotenv import load_dotenv
@@ -57,6 +60,70 @@ def clean(value):
     value = (value or "").strip()
     return value or None
 
+def query_all(sql, params=()):
+    """Run a SELECT and return all rows as dictionaries."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, params)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def query_one(sql, params=()):
+    """Run a SELECT and return the first row, or None."""
+    rows = query_all(sql, params)
+    return rows[0] if rows else None
+
+
+def run_write(sql, params=()):
+    """Run INSERT/UPDATE/DELETE. Returns rows affected, or None if it failed."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, params)
+        conn.commit()
+        return cursor.rowcount
+    except mysql.connector.Error as err:
+        flash(f"Database error: {err.msg}", "danger")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def flash_errors(errors):
+    for error in errors:
+        flash(error, "danger")
+
+
+def parse_json(value, default):
+    """MySQL JSON columns come back as text; turn them into Python objects."""
+    if value is None:
+        return default
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode()
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return default
+    return value
+
+
+def valid_date(value):
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+@app.template_filter("money")
+def money(value):
+    return f"${value:,}" if value is not None else "—"
 
 # COMPANY SECTION
 
@@ -209,6 +276,439 @@ def delete_company(company_id):
         cursor.close()
         conn.close()
     return redirect(url_for("companies"))
+
+# JOBS SECTION
+
+JOB_TYPES = ["Full-time", "Part-time", "Contract", "Internship"]
+
+
+def get_job_form():
+    data = {field: clean(request.form.get(field)) for field in
+            ["company_id", "job_title", "job_type", "salary_min",
+             "salary_max", "job_url", "date_posted", "requirements"]}
+    errors = []
+
+    if not (data["company_id"] and data["company_id"].isdigit()
+            and query_one("SELECT company_id FROM companies WHERE company_id = %s",
+                          (data["company_id"],))):
+        errors.append("Please select a valid company.")
+
+    if not data["job_title"]:
+        errors.append("Job title is required.")
+    elif len(data["job_title"]) > 100:
+        errors.append("Job title must be 100 characters or fewer.")
+
+    if data["job_type"] and data["job_type"] not in JOB_TYPES:
+        errors.append("Invalid job type.")
+
+    for field in ("salary_min", "salary_max"):
+        if data[field] and not data[field].isdigit():
+            errors.append(f"{field.replace('_', ' ').capitalize()} must be a whole positive number.")
+    if (data["salary_min"] and data["salary_max"]
+            and data["salary_min"].isdigit() and data["salary_max"].isdigit()
+            and int(data["salary_min"]) > int(data["salary_max"])):
+        errors.append("Minimum salary cannot be greater than maximum salary.")
+
+    if data["job_url"]:
+        if len(data["job_url"]) > 300:
+            errors.append("Job URL must be 300 characters or fewer.")
+        elif not data["job_url"].startswith(("http://", "https://")):
+            errors.append("Job URL must start with http:// or https://")
+
+    if data["date_posted"] and not valid_date(data["date_posted"]):
+        errors.append("Date posted must be a valid date.")
+
+    skills = []
+    for skill in (data["requirements"] or "").split(","):
+        skill = skill.strip()
+        if skill and skill.lower() not in [s.lower() for s in skills]:
+            skills.append(skill)
+
+    return data, skills, errors
+
+
+def job_values(data, skills):
+    """Convert form strings into the types MySQL expects, in column order."""
+    return [
+        int(data["company_id"]),
+        data["job_title"],
+        data["job_type"],
+        int(data["salary_min"]) if data["salary_min"] else None,
+        int(data["salary_max"]) if data["salary_max"] else None,
+        data["job_url"],
+        data["date_posted"],
+        json.dumps(skills) if skills else None,
+    ]
+
+
+def render_jobs_page(form=None, edit_id=None):
+    jobs = query_all("""
+        SELECT j.*, c.company_name
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.company_id
+        ORDER BY j.date_posted DESC
+    """)
+    for job in jobs:
+        job["skills"] = parse_json(job["requirements"], [])
+    companies = query_all("SELECT company_id, company_name FROM companies ORDER BY company_name")
+    return render_template("jobs.html", jobs=jobs, companies=companies,
+                           job_types=JOB_TYPES, form=form or {},
+                           edit_id=edit_id, detail=None)
+
+
+@app.route("/jobs")
+def jobs():
+    return render_jobs_page()
+
+
+@app.route("/jobs/<int:job_id>")
+def job_detail(job_id):
+    job = query_one("""
+        SELECT j.*, c.company_name
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.company_id
+        WHERE j.job_id = %s
+    """, (job_id,))
+    if job is None:
+        flash("Job not found.", "warning")
+        return redirect(url_for("jobs"))
+    job["skills"] = parse_json(job["requirements"], [])
+    applications = query_all("""
+        SELECT application_id, application_date, status
+        FROM applications WHERE job_id = %s
+        ORDER BY application_date DESC
+    """, (job_id,))
+    return render_template("jobs.html", detail=job, applications=applications)
+
+
+@app.route("/jobs/add", methods=["POST"])
+def add_job():
+    data, skills, errors = get_job_form()
+    if errors:
+        flash_errors(errors)
+        return render_jobs_page(form=data)
+
+    result = run_write("""
+        INSERT INTO jobs (company_id, job_title, job_type, salary_min,
+                          salary_max, job_url, date_posted, requirements)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, job_values(data, skills))
+    if result is not None:
+        flash(f"Job '{data['job_title']}' added.", "success")
+    return redirect(url_for("jobs"))
+
+
+@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
+def edit_job(job_id):
+    if request.method == "POST":
+        data, skills, errors = get_job_form()
+        if errors:
+            flash_errors(errors)
+            return render_jobs_page(form=data, edit_id=job_id)
+
+        result = run_write("""
+            UPDATE jobs
+            SET company_id = %s, job_title = %s, job_type = %s, salary_min = %s,
+                salary_max = %s, job_url = %s, date_posted = %s, requirements = %s
+            WHERE job_id = %s
+        """, job_values(data, skills) + [job_id])
+        if result is not None:
+            flash(f"Job '{data['job_title']}' updated.", "success")
+        return redirect(url_for("jobs"))
+
+    job = query_one("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
+    if job is None:
+        flash("Job not found.", "warning")
+        return redirect(url_for("jobs"))
+    job["requirements"] = ", ".join(parse_json(job["requirements"], []))
+    return render_jobs_page(form=job, edit_id=job_id)
+
+
+@app.route("/jobs/<int:job_id>/delete", methods=["POST"])
+def delete_job(job_id):
+    result = run_write("DELETE FROM jobs WHERE job_id = %s", (job_id,))
+    if result:
+        flash("Job deleted.", "success")
+    elif result == 0:
+        flash("Job not found.", "warning")
+    return redirect(url_for("jobs"))
+
+# APPLICATION SECTION
+
+APP_STATUSES = ["Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn"]
+
+
+def get_application_form():
+    data = {field: clean(request.form.get(field)) for field in
+            ["job_id", "application_date", "status", "resume_version",
+             "interview_round", "interviewer", "interview_notes"]}
+    data["cover_letter_sent"] = "cover_letter_sent" in request.form
+    errors = []
+
+    if not (data["job_id"] and data["job_id"].isdigit()
+            and query_one("SELECT job_id FROM jobs WHERE job_id = %s", (data["job_id"],))):
+        errors.append("Please select a valid job.")
+
+    if not data["application_date"]:
+        errors.append("Application date is required.")
+    elif not valid_date(data["application_date"]):
+        errors.append("Application date must be a valid date.")
+
+    if data["status"] not in APP_STATUSES:
+        errors.append("Please select a valid status.")
+
+    if data["resume_version"] and len(data["resume_version"]) > 50:
+        errors.append("Resume version must be 50 characters or fewer.")
+
+    if data["interview_round"] and not data["interview_round"].isdigit():
+        errors.append("Interview round must be a whole number.")
+
+    # Build the interview_data JSON object from the optional fields
+    interview = {}
+    if data["interview_round"] and data["interview_round"].isdigit():
+        interview["round"] = int(data["interview_round"])
+    if data["interviewer"]:
+        interview["interviewer"] = data["interviewer"]
+    if data["interview_notes"]:
+        interview["notes"] = data["interview_notes"]
+
+    return data, interview, errors
+
+
+def application_values(data, interview):
+    return [
+        int(data["job_id"]),
+        data["application_date"],
+        data["status"],
+        data["resume_version"],
+        data["cover_letter_sent"],
+        json.dumps(interview) if interview else None,
+    ]
+
+
+def render_applications_page(form=None, edit_id=None):
+    applications = query_all("""
+        SELECT a.*, j.job_title, c.company_name
+        FROM applications a
+        LEFT JOIN jobs j ON a.job_id = j.job_id
+        LEFT JOIN companies c ON j.company_id = c.company_id
+        ORDER BY a.application_date DESC
+    """)
+    jobs = query_all("""
+        SELECT j.job_id, j.job_title, c.company_name
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.company_id
+        ORDER BY c.company_name, j.job_title
+    """)
+    if form is None:
+        form = {"status": "Applied", "application_date": datetime.today().strftime("%Y-%m-%d")}
+    return render_template("applications.html", applications=applications, jobs=jobs,
+                           statuses=APP_STATUSES, form=form, edit_id=edit_id, detail=None)
+
+
+@app.route("/applications")
+def applications():
+    return render_applications_page()
+
+
+@app.route("/applications/<int:application_id>")
+def application_detail(application_id):
+    application = query_one("""
+        SELECT a.*, j.job_title, c.company_id, c.company_name
+        FROM applications a
+        LEFT JOIN jobs j ON a.job_id = j.job_id
+        LEFT JOIN companies c ON j.company_id = c.company_id
+        WHERE a.application_id = %s
+    """, (application_id,))
+    if application is None:
+        flash("Application not found.", "warning")
+        return redirect(url_for("applications"))
+    application["interview"] = parse_json(application["interview_data"], {})
+    return render_template("applications.html", detail=application)
+
+
+@app.route("/applications/add", methods=["POST"])
+def add_application():
+    data, interview, errors = get_application_form()
+    if errors:
+        flash_errors(errors)
+        return render_applications_page(form=data)
+
+    result = run_write("""
+        INSERT INTO applications (job_id, application_date, status,
+                                  resume_version, cover_letter_sent, interview_data)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, application_values(data, interview))
+    if result is not None:
+        flash("Application added.", "success")
+    return redirect(url_for("applications"))
+
+
+@app.route("/applications/<int:application_id>/edit", methods=["GET", "POST"])
+def edit_application(application_id):
+    if request.method == "POST":
+        data, interview, errors = get_application_form()
+        if errors:
+            flash_errors(errors)
+            return render_applications_page(form=data, edit_id=application_id)
+
+        result = run_write("""
+            UPDATE applications
+            SET job_id = %s, application_date = %s, status = %s,
+                resume_version = %s, cover_letter_sent = %s, interview_data = %s
+            WHERE application_id = %s
+        """, application_values(data, interview) + [application_id])
+        if result is not None:
+            flash("Application updated.", "success")
+        return redirect(url_for("applications"))
+
+    application = query_one("SELECT * FROM applications WHERE application_id = %s",
+                            (application_id,))
+    if application is None:
+        flash("Application not found.", "warning")
+        return redirect(url_for("applications"))
+    interview = parse_json(application["interview_data"], {})
+    application["interview_round"] = interview.get("round")
+    application["interviewer"] = interview.get("interviewer")
+    application["interview_notes"] = interview.get("notes")
+    return render_applications_page(form=application, edit_id=application_id)
+
+
+@app.route("/applications/<int:application_id>/delete", methods=["POST"])
+def delete_application(application_id):
+    result = run_write("DELETE FROM applications WHERE application_id = %s", (application_id,))
+    if result:
+        flash("Application deleted.", "success")
+    elif result == 0:
+        flash("Application not found.", "warning")
+    return redirect(url_for("applications"))
+
+# CONTACTS SECTION
+
+CONTACT_FIELDS = ["company_id", "contact_name", "title", "email",
+                  "phone", "linkedin_url", "notes"]
+EMAIL_PATTERN = r"[^@\s]+@[^@\s]+\.[^@\s]+"
+PHONE_PATTERN = r"[0-9\s\-\(\)\+\.]{7,20}"
+
+
+def get_contact_form():
+    data = {field: clean(request.form.get(field)) for field in CONTACT_FIELDS}
+    errors = []
+
+    if not (data["company_id"] and data["company_id"].isdigit()
+            and query_one("SELECT company_id FROM companies WHERE company_id = %s",
+                          (data["company_id"],))):
+        errors.append("Please select a valid company.")
+
+    if not data["contact_name"]:
+        errors.append("Contact name is required.")
+
+    limits = {"contact_name": 100, "title": 100, "email": 100,
+              "phone": 20, "linkedin_url": 200}
+    for field, limit in limits.items():
+        if data[field] and len(data[field]) > limit:
+            label = field.replace("_", " ").capitalize()
+            errors.append(f"{label} must be {limit} characters or fewer.")
+
+    if data["email"] and not re.fullmatch(EMAIL_PATTERN, data["email"]):
+        errors.append("Email address is not valid.")
+
+    if data["phone"] and not re.fullmatch(PHONE_PATTERN, data["phone"]):
+        errors.append("Phone may only contain digits, spaces and + - ( ) . (7-20 characters).")
+
+    if data["linkedin_url"] and not data["linkedin_url"].startswith(("http://", "https://")):
+        errors.append("LinkedIn URL must start with http:// or https://")
+
+    return data, errors
+
+
+def contact_values(data):
+    values = [data[f] for f in CONTACT_FIELDS]
+    values[0] = int(values[0])
+    return values
+
+
+def render_contacts_page(form=None, edit_id=None):
+    contacts = query_all("""
+        SELECT ct.*, c.company_name
+        FROM contacts ct
+        LEFT JOIN companies c ON ct.company_id = c.company_id
+        ORDER BY ct.contact_name
+    """)
+    companies = query_all("SELECT company_id, company_name FROM companies ORDER BY company_name")
+    return render_template("contacts.html", contacts=contacts, companies=companies,
+                           form=form or {}, edit_id=edit_id, detail=None)
+
+
+@app.route("/contacts")
+def contacts():
+    return render_contacts_page()
+
+
+@app.route("/contacts/<int:contact_id>")
+def contact_detail(contact_id):
+    contact = query_one("""
+        SELECT ct.*, c.company_name
+        FROM contacts ct
+        LEFT JOIN companies c ON ct.company_id = c.company_id
+        WHERE ct.contact_id = %s
+    """, (contact_id,))
+    if contact is None:
+        flash("Contact not found.", "warning")
+        return redirect(url_for("contacts"))
+    return render_template("contacts.html", detail=contact)
+
+
+@app.route("/contacts/add", methods=["POST"])
+def add_contact():
+    data, errors = get_contact_form()
+    if errors:
+        flash_errors(errors)
+        return render_contacts_page(form=data)
+
+    result = run_write("""
+        INSERT INTO contacts (company_id, contact_name, title, email,
+                              phone, linkedin_url, notes)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, contact_values(data))
+    if result is not None:
+        flash(f"Contact '{data['contact_name']}' added.", "success")
+    return redirect(url_for("contacts"))
+
+
+@app.route("/contacts/<int:contact_id>/edit", methods=["GET", "POST"])
+def edit_contact(contact_id):
+    if request.method == "POST":
+        data, errors = get_contact_form()
+        if errors:
+            flash_errors(errors)
+            return render_contacts_page(form=data, edit_id=contact_id)
+
+        result = run_write("""
+            UPDATE contacts
+            SET company_id = %s, contact_name = %s, title = %s, email = %s,
+                phone = %s, linkedin_url = %s, notes = %s
+            WHERE contact_id = %s
+        """, contact_values(data) + [contact_id])
+        if result is not None:
+            flash(f"Contact '{data['contact_name']}' updated.", "success")
+        return redirect(url_for("contacts"))
+
+    contact = query_one("SELECT * FROM contacts WHERE contact_id = %s", (contact_id,))
+    if contact is None:
+        flash("Contact not found.", "warning")
+        return redirect(url_for("contacts"))
+    return render_contacts_page(form=contact, edit_id=contact_id)
+
+
+@app.route("/contacts/<int:contact_id>/delete", methods=["POST"])
+def delete_contact(contact_id):
+    result = run_write("DELETE FROM contacts WHERE contact_id = %s", (contact_id,))
+    if result:
+        flash("Contact deleted.", "success")
+    elif result == 0:
+        flash("Contact not found.", "warning")
+    return redirect(url_for("contacts"))
 
 # MAIN
 

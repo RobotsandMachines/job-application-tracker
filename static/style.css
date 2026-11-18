@@ -384,3 +384,39 @@ a:hover {
     text-transform: uppercase;
     color: var(--color-muted);
 }
+/* SKILL TAGS FOR JOBS */
+.tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+    background-color: #eef1f5;
+    font-size: 0.8rem;
+}
+
+/* CHECKBOXES */
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.form-check input {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--color-primary);
+}
+
+.form-section-title {
+    font-size: 1rem;
+    color: var(--color-muted);
+    border-top: 1px solid var(--color-border);
+    padding-top: 1rem;
+    margin: 0.5rem 0 1rem;
+}

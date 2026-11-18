@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+
+{% if detail %}
+{# DETAILS #}
+<div class="page-header">
+    <h1>{{ detail.contact_name }}</h1>
+    <div class="actions">
+        <a class="btn btn-primary" href="{{ url_for('edit_contact', contact_id=detail.contact_id) }}">Edit</a>
+        <a class="btn btn-secondary" href="{{ url_for('contacts') }}">Back</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body detail-grid">
+        <div><span class="detail-label">Title</span>{{ detail.title or '—' }}</div>
+        <div><span class="detail-label">Company</span>
+            {% if detail.company_id %}
+            <a href="{{ url_for('company_detail', company_id=detail.company_id) }}">{{ detail.company_name }}</a>
+            {% else %}—{% endif %}
+        </div>
+        <div><span class="detail-label">Email</span>
+            {% if detail.email %}<a href="mailto:{{ detail.email }}">{{ detail.email }}</a>{% else %}—{% endif %}
+        </div>
+        <div><span class="detail-label">Phone</span>{{ detail.phone or '—' }}</div>
+        <div class="full"><span class="detail-label">LinkedIn</span>
+            {% if detail.linkedin_url %}<a href="{{ detail.linkedin_url }}" target="_blank">{{ detail.linkedin_url }}</a>{% else %}—{% endif %}
+        </div>
+        <div class="full"><span class="detail-label">Notes</span>{{ detail.notes or '—' }}</div>
+    </div>
+</div>
+
+{% else %}
+{# FORM AND LIST #}
+<h1>Contacts</h1>
+
+<div class="card">
+    <div class="card-header">{{ 'Edit Contact' if edit_id else 'Add Contact' }}</div>
+    <div class="card-body">
+        <form method="post"
+              action="{{ url_for('edit_contact', contact_id=edit_id) if edit_id else url_for('add_contact') }}">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label" for="contact_name">Name *</label>
+                    <input class="form-control" id="contact_name" name="contact_name"
+                           maxlength="100" required value="{{ form.contact_name or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="company_id">Company *</label>
+                    <select class="form-control" id="company_id" name="company_id" required>
+                        <option value="">Select a company</option>
+                        {% for c in companies %}
+                        <option value="{{ c.company_id }}"
+                            {% if form.company_id|string == c.company_id|string %}selected{% endif %}>
+                            {{ c.company_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="title">Title</label>
+                    <input class="form-control" id="title" name="title"
+                           maxlength="100" value="{{ form.title or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input class="form-control" id="email" name="email" type="email"
+                           maxlength="100" value="{{ form.email or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="phone">Phone</label>
+                    <input class="form-control" id="phone" name="phone" type="tel"
+                           maxlength="20" value="{{ form.phone or '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="linkedin_url">LinkedIn URL</label>
+                    <input class="form-control" id="linkedin_url" name="linkedin_url" type="url"
+                           maxlength="200" placeholder="https://linkedin.com/in/" value="{{ form.linkedin_url or '' }}">
+                </div>
+                <div class="form-group full">
+                    <label class="form-label" for="notes">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3">{{ form.notes or '' }}</textarea>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">{{ 'Save Changes' if edit_id else 'Add Contact' }}</button>
+                {% if edit_id %}
+                <a class="btn btn-secondary" href="{{ url_for('contacts') }}">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">All Contacts ({{ contacts|length }})</div>
+    <table class="table">
+        <thead>
+            <tr><th>Name</th><th>Title</th><th>Company</th><th>Email</th><th>Phone</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            {% for ct in contacts %}
+            <tr>
+                <td><a href="{{ url_for('contact_detail', contact_id=ct.contact_id) }}">{{ ct.contact_name }}</a></td>
+                <td>{{ ct.title or '—' }}</td>
+                <td>{{ ct.company_name or '—' }}</td>
+                <td>{% if ct.email %}<a href="mailto:{{ ct.email }}">{{ ct.email }}</a>{% else %}—{% endif %}</td>
+                <td>{{ ct.phone or '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('edit_contact', contact_id=ct.contact_id) }}">Edit</a>
+                        <form method="post" action="{{ url_for('delete_contact', contact_id=ct.contact_id) }}"
+                              onsubmit="return confirm('Delete this contact?');">
+                            <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-muted">No contacts yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}

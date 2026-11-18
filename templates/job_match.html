@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Job Match{% endblock %}
+{% block content %}
+<h1>Job Match</h1>
+
+<div class="card">
+    <div class="card-header">Your Skills</div>
+    <div class="card-body">
+        <form method="get" action="{{ url_for('job_match') }}">
+            <div class="form-group">
+                <label class="form-label" for="skills">Enter your skills (separated by commas)</label>
+                <input class="form-control" id="skills" name="skills"
+                       placeholder="Python, SQL, Flask" value="{{ skills }}" required>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" type="submit">Find Matches</button>
+                {% if searched %}
+                <a class="btn btn-secondary" href="{{ url_for('job_match') }}">Clear</a>
+                {% endif %}
+            </div>
+        </form>
+        {% if all_skills %}
+        <p class="form-label skills-hint">Skills in your job listings:</p>
+        <div class="tags">
+            {% for skill in all_skills %}<span class="tag">{{ skill }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if searched %}
+<div class="card">
+    <div class="card-header">Matching Jobs ({{ results|length }})</div>
+    <ul class="list">
+        {% for r in results %}
+        <li class="list-item match-item">
+            <div class="match-info">
+                <a href="{{ url_for('job_detail', job_id=r.job_id) }}"><strong>{{ r.job_title }}</strong></a>
+                <span class="text-muted">at {{ r.company_name or 'Unknown' }}</span>
+                <div class="tags match-tags">
+                    {% for s in r.matched %}<span class="tag tag-matched">✓ {{ s }}</span>{% endfor %}
+                    {% for s in r.missing %}<span class="tag tag-missing">✗ {{ s }}</span>{% endfor %}
+                </div>
+            </div>
+            <div class="match-score">
+                <span class="match-percent">{{ r.percent }}%</span>
+                <span class="text-muted">{{ r.matched|length }}/{{ r.total }} skills</span>
+                <div class="match-bar">
+                    <div class="match-fill" style="width: {{ r.percent }}%"></div>
+                </div>
+            </div>
+        </li>
+        {% else %}
+        <li class="list-item text-muted">No jobs match those skills.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

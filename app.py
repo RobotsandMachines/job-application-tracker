@@ -710,6 +710,49 @@ def delete_contact(contact_id):
         flash("Contact not found.", "warning")
     return redirect(url_for("contacts"))
 
+# JOB MATCH
+
+@app.route("/job-match")
+def job_match():
+    raw = request.args.get("skills", "")
+    user_skills = [s.strip() for s in raw.split(",") if s.strip()]
+    user_set = {s.lower() for s in user_skills}
+
+    jobs = query_all("""
+        SELECT j.job_id, j.job_title, j.requirements, c.company_name
+        FROM jobs j
+        LEFT JOIN companies c ON j.company_id = c.company_id
+    """)
+
+    all_skills = set()
+    results = []
+    for job in jobs:
+        required = parse_json(job["requirements"], [])
+        all_skills.update(required)
+        if not required or not user_set:
+            continue
+
+        matched = [s for s in required if s.lower() in user_set]
+        missing = [s for s in required if s.lower() not in user_set]
+        if not matched:
+            continue
+
+        results.append({
+            "job_id": job["job_id"],
+            "job_title": job["job_title"],
+            "company_name": job["company_name"],
+            "matched": matched,
+            "missing": missing,
+            "total": len(required),
+            "percent": round(len(matched) / len(required) * 100),
+        })
+
+    results.sort(key=lambda r: (r["percent"], len(r["matched"])), reverse=True)
+
+    return render_template("job_match.html", skills=raw, results=results,
+                           searched=bool(user_set),
+                           all_skills=sorted(all_skills, key=str.lower))
+
 # MAIN
 
 if __name__ == "__main__":

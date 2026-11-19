@@ -69,5 +69,5 @@ job-application-tracker/
 
 ## Demo Video
 
-[![Watch the demo](https://img.youtube.com/vi/5xhq_pqPIXU/0.jpg)](https://www.youtube.com/watch?v=5xhq_pqPIXU)
+[![Watch the demo](https://img.youtube.com/vi/5XfAtboThfU/0.jpg)](https://youtu.be/5XfAtboThfU)
 
